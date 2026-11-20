@@ -18,6 +18,7 @@ import requests
 from dns.rdtypes.svcbbase import ECHParam
 
 from hiddifypanel.cache import STATIC, cache
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT, domain_gateway_ports
 from hiddifypanel.hutils.network import maxmind
 from hiddifypanel.models import *
 
@@ -718,10 +719,8 @@ def all_public_ports():
     from hiddifypanel.proxy_v3.custom_proxy_ports import firewall_protocols_for_proxy, mode_uses_firewall_ports, ports_for_proxy_row
     from hiddifypanel.proxy_v3.proxy_render_matrix import _domains_for_proxy_row
 
-    tcp_ports = {80: "http", 443: "tls"}
-    udp_ports = {
-        443: "quic",
-    }
+    tcp_ports = {GATEWAY_CLIENT_HTTP_PORT: "http", GATEWAY_CLIENT_TLS_PORT: "tls"}
+    udp_ports = {GATEWAY_CLIENT_TLS_PORT: "quic"}
 
     def add(ports, setting, name):
         for p in _port_list(hconfig(setting)):
@@ -730,18 +729,13 @@ def all_public_ports():
     if hconfig(ConfigEnum.wireguard_enable):
         add(udp_ports, ConfigEnum.wireguard_port, "wireguard")
 
-    # The gateway listens on 80 / 443 only (above); the old tls_ports / http_ports settings (hidden) would still open the
-    # ports a server had in them. A domain's own ports are added below.
-
     child_id = Child.current().id
     domains = Domain.query.filter(Domain.child_id == child_id).all()
-    # A domain can have its own gateway ports.
     for d in domains:
-        if d.tls_port:
-            tcp_ports[d.tls_port] = "tls"
-            udp_ports[d.tls_port] = "quic"
-        if d.http_port:
-            tcp_ports[d.http_port] = "http"
+        http_port, tls_port = domain_gateway_ports(d.http_port, d.tls_port)
+        tcp_ports[http_port] = "http"
+        tcp_ports[tls_port] = "tls"
+        udp_ports[tls_port] = "quic"
 
     # Custom proxies that listen on their own public ports (IP based, single or automatic public ports).
     for row in CustomProxy.query.filter(CustomProxy.child_id == child_id).all():

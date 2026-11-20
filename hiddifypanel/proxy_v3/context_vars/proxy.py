@@ -192,7 +192,7 @@ def resolve_domain_type(domain_mode: str) -> DomainType:
 
 
 def domain_gateway_port(domain: DomainIPVar, port: int | None) -> int | None:
-    """The domain's own gateway port instead of the default 443 (TLS) / 80 (HTTP)."""
+    """The domain's own gateway port instead of the server-wide gateway port."""
     if port == GATEWAY_CLIENT_TLS_PORT:
         return int(domain.tls_port or port)
     if port == GATEWAY_CLIENT_HTTP_PORT:

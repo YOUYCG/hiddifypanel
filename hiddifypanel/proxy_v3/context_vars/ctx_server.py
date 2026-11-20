@@ -4,6 +4,8 @@ from collections.abc import Iterator
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT
+
 from .cert import CertVar
 from .domain import DomainIPVar
 from .hconfig import HConfigVar
@@ -31,6 +33,14 @@ class ServerContextVar(BaseModel):
     shared_cert: CertVar = Field(default_factory=CertVar.empty)
     #: Outbound manager: outbounds in rule order and the default (final) tags.
     outbounds: OutboundsVar = Field(default_factory=OutboundsVar)
+
+    @property
+    def gateway_http_port(self) -> int:
+        return GATEWAY_CLIENT_HTTP_PORT
+
+    @property
+    def gateway_tls_port(self) -> int:
+        return GATEWAY_CLIENT_TLS_PORT
 
     def use_proxy(self, proxy: ServerBuilderProxyVar) -> ServerContextProxyVar:
         return ServerContextProxyVar(

@@ -1,7 +1,7 @@
 {#
   Builtin telegram_faketls (subscription links): Telegram MTProxy FakeTLS links, one per domain assigned to the proxy
-  (an SNI proxy, like ShadowTLS): rust-rpxy sends that domain's SNI on :443 to telemt.
-  tg://proxy?server=<server>&port=443&secret=ee<secret hex><domain hex>
+  (an SNI proxy, like ShadowTLS): rust-rpxy sends that domain's SNI on its TLS gateway port to telemt.
+  tg://proxy?server=<server>&port=<tls port>&secret=ee<secret hex><domain hex>
   Gated in render_sublink_links: only when include_telegram_links (mtproxies API).
 #}
 {%- if ctx.hconfig.telegram_enable %}
@@ -10,7 +10,7 @@
   {%- for f in ctx.proxy.domains %}
     {%- set fake_hex = f.sni.encode('utf-8').hex() %}
     {%- for server in f.ips.ips %}
-tg://proxy?server={{ server }}&port=443&secret=ee{{ secret }}{{ fake_hex }}
+tg://proxy?server={{ server }}&port={{ f.tls_port }}&secret=ee{{ secret }}{{ fake_hex }}
     {%- endfor %}
   {%- endfor %}
 {%- endif %}

@@ -18,7 +18,7 @@
     },
   {% endfor %}
 ],
-"masquerade": "http://{{ ctx.shared_cert.server_name }}:80/",
+"masquerade": "http://{{ ctx.shared_cert.server_name }}:{{ ctx.gateway_http_port }}/",
 {%with cert=ctx.shared_cert%}
   {% include 'hiddify-core/server/tls/tls' %}
 {%endwith%}

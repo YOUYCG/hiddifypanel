@@ -32,7 +32,7 @@ from hiddifypanel.models import Child, ConfigEnum, CustomProxy, CustomProxyMode,
 from hiddifypanel.models.domain import normalize_domain_name
 from hiddifypanel.models.tls_store import TlsStore
 from hiddifypanel.panel import domain_rules
-from hiddifypanel.proxy_v3.context_vars.ports import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT, domain_gateway_ports
 from hiddifypanel.proxy_v3.domain_mode_filter import domain_modes_use_reality
 from hiddifypanel.proxy_v3.domain_proxy_options import REALITY_TERMINATION_SLUG, list_domain_proxy_options, proxy_mode_group
 
@@ -65,7 +65,7 @@ def is_host(name: str) -> bool:
         return True
     except ValueError:
         return bool(DOMAIN_RE.match(name))
-# A domain's own TLS / HTTP port is not served by anything: the firewall redirects it to 443 / 80
+# A domain's own TLS / HTTP port is forwarded by the firewall to the server's gateway listener
 # (services/firewall). So no process may listen on it, not even haproxy or rpxy-l4.
 #: Settings whose ports belong to other services (a domain gateway port must not take them).
 OTHER_SERVICE_PORTS = (
@@ -163,7 +163,7 @@ def _panel_link(d: Domain) -> str | None:
 
     host = d.domain.replace("*", hutils.random.get_random_string(5, 15)) if "*" in d.domain else d.domain
     try:
-        return hiddify.get_account_panel_link(g.account, host)
+        return hiddify.get_account_panel_link(g.account, host, port=domain_gateway_ports(d.http_port, d.tls_port)[1])
     except Exception:
         return None
 
@@ -326,9 +326,11 @@ def reserved_ports(child_id: int, *, kind: str, domain_id: int | None = None) ->
     for key in OTHER_SERVICE_PORTS:
         for p in _ports(hconfig(key)):
             used.setdefault(p, f"setting:{key.name}")
-    # The gateway ports the panel itself serves (443 / 80; the old tls_ports / http_ports settings are not read).
     used.setdefault(GATEWAY_CLIENT_TLS_PORT, "gateway:tls")
     used.setdefault(GATEWAY_CLIENT_HTTP_PORT, "gateway:http")
+    # Do not add redirects on the standard ports when they are owned by another service.
+    used.setdefault(80, "system")
+    used.setdefault(443, "system")
     # A TLS port of one domain can not be the HTTP port of another one (same server), and the other way round.
     for d in Domain.query.filter(Domain.child_id == child_id).all():
         if d.id == domain_id:

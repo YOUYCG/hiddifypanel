@@ -3,11 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT
+
 if TYPE_CHECKING:
     from hiddifypanel.models.custom_proxy import CustomProxyMode, InboundTcpUdp
-
-GATEWAY_CLIENT_TLS_PORT = 443
-GATEWAY_CLIENT_HTTP_PORT = 80
 
 
 def _tls_layer_key(tls_layer: Any) -> str:

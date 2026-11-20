@@ -5,6 +5,7 @@ from typing import TypedDict
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT, domain_gateway_ports
 from hiddifypanel.hutils import domain_label
 from hiddifypanel import hutils
 from hiddifypanel.hutils.network.auto_ip_selector import split_pattern
@@ -35,10 +36,10 @@ class DomainIPVar(BaseModel):
     ips: IPVar = Field(default_factory=IPVar.empty)
     host: str = ""
     sni: str = ""
-    port: int = 443
+    port: int = GATEWAY_CLIENT_TLS_PORT
     #: Gateway ports clients use for this domain's SNI / L7 proxies (Domains page → Advanced).
-    tls_port: int = 443
-    http_port: int = 80
+    tls_port: int = GATEWAY_CLIENT_TLS_PORT
+    http_port: int = GATEWAY_CLIENT_HTTP_PORT
 
     mode: DomainType
     fake_mode: FakeMode = FakeMode.valid
@@ -162,6 +163,7 @@ class DomainIPVar(BaseModel):
         server_host = domain_db.get_server()
         cert = _client_cert_for_domain(domain_db, hostname=hostname, sni=sni, connect_host=server_host or hostname)
         frag = tls_fragment_mod.resolve(domain_mode=domain_db.mode, extra=extra)
+        http_port, tls_port = domain_gateway_ports(domain_db.http_port, domain_db.tls_port)
         var = cls(
             id=domain_db.id,
             name=hostname,
@@ -188,8 +190,8 @@ class DomainIPVar(BaseModel):
             has_cdn_ip=bool((domain_db.cdn_ip or "").strip()),
             custom_proxy_ids=set(domain_db.custom_proxy_ids),
             ips=ips,
-            tls_port=int(domain_db.tls_port or 443),
-            http_port=int(domain_db.http_port or 80),
+            tls_port=tls_port,
+            http_port=http_port,
         )
         if domain_db.download_domain:
             var.download = cls.from_domain(domain_db.download_domain)

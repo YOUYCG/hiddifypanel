@@ -20,6 +20,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from loguru import logger
 
 from hiddifypanel.acme import challenges, client
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT
 
 MAX_NAME = 64  # x509 CN limit; acme.sh did not issue longer names either (they get a self-signed certificate)
 ORDER_TIMEOUT = 150  # seconds for validation and finalization
@@ -111,11 +112,11 @@ def _describe(err: Exception) -> str:
 
 
 def _self_check(path: str, expected: str) -> str:
-    """Debug: is the challenge answered locally (HAProxy on port 80)?"""
+    """Debug: is the challenge answered locally (HAProxy on its configured HTTP port)?"""
     import requests
 
     try:
-        resp = requests.get(f"http://127.0.0.1{path}", timeout=3, headers={"Host": "acme.local"})
+        resp = requests.get(f"http://127.0.0.1:{GATEWAY_CLIENT_HTTP_PORT}{path}", timeout=3, headers={"Host": "acme.local"})
         return "ok" if resp.status_code == 200 and resp.text.strip() == expected else f"HTTP {resp.status_code} {resp.text[:80]!r}"
     except requests.RequestException as e:
         return f"not reachable ({e})"

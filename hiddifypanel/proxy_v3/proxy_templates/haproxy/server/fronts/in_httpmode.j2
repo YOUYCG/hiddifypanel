@@ -16,7 +16,7 @@ frontend in-httpmode-ssl
 
 frontend in-reality-tcpmode
   bind abns@tcp_in_reality_h1 accept-proxy
-  bind :80{% if ctx.hconfig.ipv6_enabled %},:::80 v4v6{% endif %} tfo
+  bind :{{ ctx.gateway_http_port }}{% if ctx.hconfig.ipv6_enabled %},:::{{ ctx.gateway_http_port }} v4v6{% endif %} tfo
   mode tcp
   tcp-request inspect-delay 500ms
   tcp-request content accept if HTTP
@@ -31,7 +31,6 @@ frontend in-httpmode
   bind abns@http_in_h2 accept-proxy name hop_clear
   bind abns@http_in_from_tls accept-proxy name hop_from_tls
   bind abns@https_in_http_mode accept-proxy allow-0rtt ssl crt {{ haproxy_cert_dir }} alpn h2,http/1.1
-  #bind quic4@:{{ port }},quic6@:{{ port }} v4v6 tfo ssl crt {{ haproxy_cert_dir }} alpn h3
   bind quic4@127.0.0.1:902 ssl crt {{ haproxy_cert_dir }} alpn h3
 
   mode http
@@ -60,14 +59,17 @@ frontend in-httpmode
   # request is then only answered in cleartext, as asked.
   acl ssl_forwarded req.hdr(x-forwarded-proto) -i https
   acl ssl_forwarded req.hdr(cf-visitor) -m sub "https"
-  http-request redirect scheme https code 301 if client_clear !ssl_forwarded { var(txn.backend) -m str panel }
-  http-request redirect scheme https code 301 if client_clear !ssl_forwarded to_decoy
+  http-request set-var(txn.gateway_host) req.hdr(host),regsub(:[0-9]+$,)
+  http-request set-var(txn.gateway_tls_port) var(txn.gateway_host),lower,map_str({{ include_path(ctx, 'haproxy/server/maps/gateway_tls_ports') }},{{ ctx.gateway_tls_port }})
+  http-request set-var-fmt(txn.gateway_tls_suffix) ":%[var(txn.gateway_tls_port)]" unless { var(txn.gateway_tls_port) -m str 443 }
+  http-request redirect location "https://%[var(txn.gateway_host)]%[var(txn.gateway_tls_suffix)]%[pathq]" code 301 if client_clear !ssl_forwarded { var(txn.gateway_host) -m found } { var(txn.backend) -m str panel }
+  http-request redirect location "https://%[var(txn.gateway_host)]%[var(txn.gateway_tls_suffix)]%[pathq]" code 301 if client_clear !ssl_forwarded { var(txn.gateway_host) -m found } to_decoy
   http-request set-var(txn.sni) ssl_fc_sni,lower if to_decoy { ssl_fc }
   http-request set-var(txn.sni) fc_pp_authority,lower if to_decoy { so_name hop_from_tls } { fc_pp_authority -m found }
   http-request set-var(txn.req_host) req.hdr(host),field(1,:),lower if to_decoy
   http-request return status 421 content-type "text/html" hdr cache-control "no-cache" string "<html><body><h1>421 Misdirected Request</h1>\nRequest sent to a non-authoritative server.\n</body></html>\n" if to_decoy { var(txn.sni) -m found } !{ var(txn.sni),strcmp(txn.req_host) eq 0 }
 
-  http-after-response set-header Alt-Svc 'h3=":443"; ma=2592000'
+  http-after-response set-header Alt-Svc 'h3=":%[var(txn.gateway_tls_port)]"; ma=2592000' if { var(txn.gateway_tls_port) -m found }
 
   use_backend %[var(txn.backend)] 
 

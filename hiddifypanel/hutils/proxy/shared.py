@@ -9,6 +9,7 @@ from flask import request
 from hiddifypanel.hutils import domain_label
 from hiddifypanel import g, hutils
 from hiddifypanel.cache import cache
+from hiddifypanel.gateway import GATEWAY_CLIENT_HTTP_PORT, GATEWAY_CLIENT_TLS_PORT, domain_gateway_ports
 from hiddifypanel.models import ConfigEnum, Domain, DomainType, FakeMode, Proxy, ProxyCDN, ProxyL3, ProxyProto, ProxyTransport, get_hconfigs, hconfig
 
 
@@ -78,7 +79,7 @@ def is_proxy_valid(proxy: Proxy, domain_db: Domain, port: int) -> dict | None:
 
 def get_port(proxy: Proxy, hconfigs: dict, domain_db: Domain, ptls: int, phttp: int, pport: int | None) -> int:
     l3 = proxy.l3
-    port = 443
+    port = GATEWAY_CLIENT_TLS_PORT
     if isinstance(phttp, str):
         phttp = int(phttp) if phttp != "None" else None  # type: ignore
     if isinstance(ptls, str):
@@ -87,7 +88,7 @@ def get_port(proxy: Proxy, hconfigs: dict, domain_db: Domain, ptls: int, phttp: 
         port = hconfigs[ConfigEnum.kcp_ports].split(",")[0]
     elif proxy.proto == ProxyProto.wireguard:
         if hconfigs.get(ConfigEnum.wireguard_use_quic_port):
-            port = ptls or 443
+            port = domain_gateway_ports(domain_db.http_port, domain_db.tls_port)[1]
         else:
             port = hconfigs[ConfigEnum.wireguard_port]
     elif proxy.proto == "tuic":
@@ -96,7 +97,7 @@ def get_port(proxy: Proxy, hconfigs: dict, domain_db: Domain, ptls: int, phttp: 
         port = domain_db.internal_port_hysteria2
     elif l3 == "ssh":
         if hconfigs.get(ConfigEnum.ssh_use_tls_port):
-            port = ptls or 443
+            port = domain_gateway_ports(domain_db.http_port, domain_db.tls_port)[1]
         else:
             port = hconfigs[ConfigEnum.ssh_server_port]
     elif proxy.proto == ProxyProto.naive and proxy.l3 == ProxyL3.h3_quic:
@@ -259,19 +260,19 @@ def get_valid_proxies(domains: list[Domain]) -> list[dict]:
                     if proxy.proto in [ProxyProto.ssh]:
                         if hconfigs.get(ConfigEnum.ssh_use_tls_port):
                             # The gateway's TLS port: the old tls_ports setting (hidden) is not read any more
-                            options = [{"pport": "443"}]
+                            options = [{"pport": str(domain_gateway_ports(domain.http_port, domain.tls_port)[1])}]
                         else:
                             options = [{"pport": hconfigs[ConfigEnum.ssh_server_port]}]
                     elif proxy.proto in [ProxyProto.wireguard]:
                         if hconfigs.get(ConfigEnum.wireguard_use_quic_port):
                             # The gateway's TLS port: the old tls_ports setting (hidden) is not read any more
-                            options = [{"pport": "443"}]
+                            options = [{"pport": str(domain_gateway_ports(domain.http_port, domain.tls_port)[1])}]
                         else:
                             options = [{"pport": hconfigs[ConfigEnum.wireguard_port]}]
                     elif proxy.transport in [ProxyTransport.shadowsocks]:
                         options = [{"pport": hconfigs[ConfigEnum.shadowsocks2022_port]}]
                     elif proxy.proto in [ProxyProto.shadowsocks]:
-                        options = [{"pport": 443}]
+                        options = [{"pport": domain_gateway_ports(domain.http_port, domain.tls_port)[1]}]
                 elif proxy.proto == ProxyProto.tuic:
                     options = [{"pport": hconfigs[ConfigEnum.tuic_port]}]
                 elif proxy.proto == ProxyProto.mieru:
@@ -284,17 +285,15 @@ def get_valid_proxies(domains: list[Domain]) -> list[dict]:
                     options = [{"pport": hconfigs[ConfigEnum.hysteria_port]}]
             else:
                 protos = ["http", "tls"] if hconfigs.get(ConfigEnum.http_proxy_enable) else ["tls"]
+                http_port, tls_port = map(str, domain_gateway_ports(domain.http_port, domain.tls_port))
                 for t in protos:
-                    # The gateway's ports (a domain's own ports are redirected to them); the old tls_ports / http_ports
-                    # settings (hidden) are not read any more.
-                    for port in ["80"] if t == "http" else ["443"]:
-                        phttp = port if t == "http" else None
-                        ptls = port if t == "tls" else None
-                        if phttp and len(allphttp) and phttp not in allphttp:
-                            continue
-                        if ptls and len(allptls) and ptls not in allptls:
-                            continue
-                        options.append({"phttp": phttp, "ptls": ptls})
+                    phttp = http_port if t == "http" else None
+                    ptls = tls_port if t == "tls" else None
+                    if phttp and len(allphttp) and phttp not in allphttp:
+                        continue
+                    if ptls and len(allptls) and ptls not in allptls:
+                        continue
+                    options.append({"phttp": phttp, "ptls": ptls})
 
             for opt in options:
                 pinfo = make_proxy(hconfigs, proxy, domain, **opt)
@@ -386,7 +385,7 @@ def put_default_header(params: dict):
         params["headers"]["Pragma"] = "no-cache"
 
 
-def make_proxy(hconfigs: dict, proxy: Proxy, domain_db: Domain, phttp=80, ptls=443, pport: int | None = None) -> dict:
+def make_proxy(hconfigs: dict, proxy: Proxy, domain_db: Domain, phttp=GATEWAY_CLIENT_HTTP_PORT, ptls=GATEWAY_CLIENT_TLS_PORT, pport: int | None = None) -> dict:
 
     l3 = proxy.l3
     domain = domain_db.domain

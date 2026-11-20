@@ -10,6 +10,7 @@ from loguru import logger
 from hiddifypanel import g, hutils
 from hiddifypanel.cache import cache
 from hiddifypanel.database import db
+from hiddifypanel.gateway import domain_gateway_ports, panel_authority
 from hiddifypanel.hutils.utils import *
 from hiddifypanel.models import *
 from hiddifypanel.panel.run_commander import Command, commander
@@ -57,7 +58,8 @@ def get_html_user_link(model: BaseAccount, domain: Domain):
 
     # for showing child/node link (we send child_id to get_account_panel_link to get domain proxy path correctly)
     d_child_id = domain.child_id
-    link = f"{get_account_panel_link(model, d, child_id=d_child_id)}#{hutils.encode.unicode_slug(model.name)}"
+    tls_port = domain_gateway_ports(domain.http_port, domain.tls_port)[1]
+    link = f"{get_account_panel_link(model, d, child_id=d_child_id, port=tls_port)}#{hutils.encode.unicode_slug(model.name)}"
 
     text = domain.alias or domain.domain
     color_cls = "info"
@@ -342,7 +344,7 @@ def url_host(host: str) -> str:
         return host
 
 
-def get_account_panel_link(account: BaseAccount, host: str, is_https: bool = True, prefere_path_only: bool = False, child_id=None):
+def get_account_panel_link(account: BaseAccount, host: str, is_https: bool = True, prefere_path_only: bool = False, child_id=None, *, port: int | None = None):
     if child_id is None:
         child_id = Child.current().id
     is_admin = isinstance(account, AdminUser)
@@ -353,7 +355,7 @@ def get_account_panel_link(account: BaseAccount, host: str, is_https: bool = Tru
         link = "https://" if is_https else "http://"
         if basic_auth:
             link += f"{account.uuid}@"
-        link += url_host(str(host))
+        link += panel_authority(url_host(str(host)), tls=is_https, port=port)
     proxy_path = hconfig(ConfigEnum.proxy_path_admin if is_admin else ConfigEnum.proxy_path_client, child_id)
     link += f"/{proxy_path}/"
 
@@ -447,6 +449,6 @@ def all_configs_for_cli():
 
     domains = Domain.get_domains()
     for d in domains:
-        configs["panel_links"].append(get_account_panel_link(owner, d.domain))
+        configs["panel_links"].append(get_account_panel_link(owner, d.domain, port=domain_gateway_ports(d.http_port, d.tls_port)[1]))
 
     return configs

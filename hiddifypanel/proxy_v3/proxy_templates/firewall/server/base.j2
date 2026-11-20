@@ -5,9 +5,6 @@ source /opt/hiddify-manager/services/firewall/utils.sh
 
 # open essential ports
 allow_port "tcp" 22
-allow_port "tcp" 80
-allow_port "tcp" 443
-allow_port "udp" 443
 allow_port "udp" 53
 allow_port "tcp" 53
 # allow_port "udp" 3478
@@ -52,10 +49,11 @@ add2iptables46 "INPUT -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"
 
 # The SSH server is a hiddify-core custom proxy now: its port is one of public_ports above (the old ssh_server_port setting is deprecated).
 
-{# Domains' own TLS / HTTP ports are redirected to 443 / 80 (they need no ACCEPT rule: it is checked after the redirect). #}
-{% set domain_tls_ports = ctx.domains|map(attribute='tls_port')|select|map('string')|unique|reject('in',['443'])|list %}
-{% set domain_http_ports = ctx.domains|map(attribute='http_port')|select|map('string')|unique|reject('in',['80'])|list %}
-redirect_domain_ports "{{domain_tls_ports|join(' ')}}" "{{domain_http_ports|join(' ')}}"
+{# Domain aliases redirect to the configured listeners. Never redirect a gateway port itself. #}
+{% set gateway_ports = [ctx.gateway_http_port, ctx.gateway_tls_port, 80, 443] %}
+{% set domain_tls_ports = ctx.domains|map(attribute='tls_port')|select|unique|reject('in',gateway_ports)|list %}
+{% set domain_http_ports = ctx.domains|map(attribute='http_port')|select|unique|reject('in',gateway_ports)|list %}
+redirect_domain_ports "{{domain_tls_ports|join(' ')}}" "{{domain_http_ports|join(' ')}}" "{{ctx.gateway_tls_port}}" "{{ctx.gateway_http_port}}"
 
 {% if ctx.hconfig.firewall %}
 iptables -P INPUT DROP
